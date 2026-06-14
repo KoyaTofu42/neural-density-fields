@@ -31,7 +31,7 @@ Think of this as the "Infinite Zoom and Optimization" phase. The team will take 
 *Goal: Refactor the code so that rendering these infinite-resolution views happens in milliseconds, ensuring the tech is viable for future massive macromolecular queries.*
 
 *   **Task 3.1: Batch Mechanism Refactoring.** Rewrite the dataloader and forward-pass logic to handle batches of >100,000 spatial points simultaneously on a single GPU, optimizing memory access patterns.
-*   **Task 3.2: JIT Compilation & CUDA Graphs.** Apply PyTorch's Just-In-Time (`torch.jit.script`) compilation to the forward pass to eliminate Python overhead. Investigate the use of CUDA graphs to minimize kernel launch latency for repetitive dense queries.
+*   **Task 3.2: `torch.compile` & CUDA Graphs.** Apply PyTorch's modern `torch.compile` optimization to the forward pass to eliminate Python overhead. Investigate the use of CUDA graphs to minimize kernel launch latency for repetitive dense queries.
 *   **Task 3.3: VRAM Profiling.** Rigorously profile GPU memory usage to ensure that querying millions of points does not cause an Out-Of-Memory (OOM) error, definitively proving that the architecture bypasses the $O(N^3)$ voxel memory limit.
 
 ## Milestone 4: Deliverable & Reporting (Weeks 17–24)
