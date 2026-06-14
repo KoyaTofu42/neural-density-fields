@@ -19,5 +19,8 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+pindf-export = "scripts.pindf_cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/data_gen", "src/dataset"]
