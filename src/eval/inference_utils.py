@@ -8,10 +8,12 @@ class OptimizedInferencer:
         self.model = model.to(device)
         self.model.eval()
 
-        # Apply torch.compile for graph fusion and overhead reduction
+        # Apply torch.compile for graph fusion
+        # Note: We investigated CUDAGraphs (mode='reduce-overhead') but found it incompatible 
+        # with PyG's dynamic radius_graph memory allocations inside the forward pass.
         try:
-            print("Applying torch.compile(mode='reduce-overhead') ...")
-            self.compiled_model = torch.compile(self.model, mode="reduce-overhead")
+            print("Applying torch.compile for kernel fusion ...")
+            self.compiled_model = torch.compile(self.model)
         except Exception as e:
             print(
                 f"Warning: torch.compile failed or unsupported ({e}). Falling back to standard execution."
@@ -39,37 +41,43 @@ class OptimizedInferencer:
         # Pre-allocate the base graph data to avoid repeated host-to-device transfers
         z_dev = z.to(self.device)
         pos_dev = pos.to(self.device)
+        
+        # Pre-allocate static PyG batching attributes so memory addresses remain constant for CUDAGraphs
+        batch_tensor = torch.zeros(z_dev.shape[0], dtype=torch.long, device=self.device)
+        query_pos_batch_tensor = torch.zeros(chunk_size, dtype=torch.long, device=self.device)
+        ptr_tensor = torch.tensor([0, z_dev.shape[0]], dtype=torch.long, device=self.device)
+        # Pre-allocate the query buffer so data_ptr() never changes
+        q_chunk_buffer = torch.zeros((chunk_size, 3), dtype=torch.float, device=self.device)
 
         total_queries = query_coords.shape[0]
 
         for i in range(0, total_queries, chunk_size):
-            if hasattr(torch.compiler, "cudagraph_mark_step_begin"):
-                torch.compiler.cudagraph_mark_step_begin()
-
-            q_chunk = query_coords[i : i + chunk_size].to(self.device)
+            q_chunk = query_coords[i : i + chunk_size]
             actual_size = q_chunk.shape[0]
 
-            # Pad to chunk_size to keep static shapes for CUDA Graphs
+            # Copy data into the static buffer to keep memory addresses identical
+            q_chunk_buffer[:actual_size].copy_(q_chunk)
             if actual_size < chunk_size:
-                pad_size = chunk_size - actual_size
-                pad_tensor = torch.zeros(
-                    (pad_size, 3), dtype=q_chunk.dtype, device=self.device
-                )
-                q_chunk = torch.cat([q_chunk, pad_tensor], dim=0)
+                q_chunk_buffer[actual_size:].zero_()
 
-            # Construct a lightweight batch without using the slow Batch.from_data_list loop
-            b = Data(z=z_dev, pos=pos_dev, query_pos=q_chunk)
-            # PyG expects a batch attribute for scatter operations. Since we process 1 molecule, it's all 0s.
-            b.batch = torch.zeros(z_dev.shape[0], dtype=torch.long, device=self.device)
-            b.query_pos_batch = torch.zeros(
-                chunk_size, dtype=torch.long, device=self.device
+            # Construct a lightweight batch using perfectly static buffers
+            b = Data(
+                z=z_dev, 
+                pos=pos_dev, 
+                query_pos=q_chunk_buffer,
+                batch=batch_tensor,
+                query_pos_batch=query_pos_batch_tensor,
+                ptr=ptr_tensor
             )
-            b.ptr = torch.tensor(
-                [0, z_dev.shape[0]], dtype=torch.long, device=self.device
-            )
-
-            density, _, _ = self.compiled_model(b)
+            
+            out_density, out_potential, out_query = self.compiled_model(b)
+            
             # Clone and slice back to the actual valid points
-            preds.append(density[:actual_size].clone().cpu())
+            preds.append(out_density[:actual_size].clone().cpu())
+            
+            # CRITICAL: Delete references to CUDAGraph outputs to prevent PyTorch overwrite protection error
+            del out_density
+            del out_potential
+            del out_query
 
         return torch.cat(preds, dim=0).squeeze().numpy()
