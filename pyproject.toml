@@ -3,7 +3,7 @@ name = "neural-density-field"
 version = "0.1.0"
 description = "SE(3)-invariant neural density field baseline"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "torch_geometric",
     "pyscf",

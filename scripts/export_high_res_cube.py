@@ -8,6 +8,7 @@ from src.models.ndf_model import NeuralDensityField
 from src.data.density_dataset import DensityDataset
 from src.data.high_res_sampler import BoundingBoxGenerator, generate_dense_grid
 from src.utils.cube_export import write_cube_file
+from src.eval.inference_utils import OptimizedInferencer
 
 def main():
     print("="*60)
@@ -57,20 +58,10 @@ def main():
     X, Y, Z, query_coords = generate_dense_grid(min_coords, max_coords, grid_res=grid_res)
     print(f"Grid generated.")
 
-    # 4. Run Inference in Batches
-    batch_size = 5000
-    density_preds = []
-    
+    # 4. Neural Inference
     print("Running inference...")
-    with torch.no_grad():
-        for i in range(0, query_coords.shape[0], batch_size):
-            q_batch = query_coords[i:i+batch_size]
-            chunk_data = Data(z=z, pos=pos, query_pos=q_batch)
-            chunk_batch = Batch.from_data_list([chunk_data]).to(device)
-            density, potential, _ = model(chunk_batch)
-            density_preds.append(density.cpu())
-            
-    density_flat = torch.cat(density_preds, dim=0).squeeze().numpy()
+    inferencer = OptimizedInferencer(model, device)
+    density_flat = inferencer.predict_density(z, pos, query_coords, chunk_size=50000)
     density_grid = density_flat.reshape((grid_res, grid_res, grid_res))
     print(f"Inference complete. Max density: {density_grid.max():.6f}")
 
