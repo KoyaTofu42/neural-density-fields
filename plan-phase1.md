@@ -22,6 +22,15 @@ Think of this as an AI engineering "Epic" designed to take the team from a blank
     *   *Strategy:* Sample heavily near the atomic nuclei (where density is high and complex) and sparsely in the empty space further away.
 *   **Task 1.3: Dataloader Creation.** Create a PyTorch dataloader where the input is `[Molecule Graph, Sampled Coordinate (X,Y,Z)]` and the target label is `[True Electron Density at that coordinate]`.
 
+**Execution:**
+```bash
+# Generate the complete dataset, run DFT, and sample points (Tasks 1.1, 1.2)
+python scripts/generate_data.py
+
+# Inspect the generated dataset and dataloader distribution (Task 1.3)
+python scripts/inspect_data.py
+```
+
 ## Milestone 2: Atomic Anchor Embedding (Weeks 5–8)
 *The network must understand the chemical environment (the "Anchors") before it can process empty space.*
 
@@ -51,6 +60,18 @@ Think of this as an AI engineering "Epic" designed to take the team from a blank
 *   **Task 5.2: The Rotation Test.** Take a test molecule. Predict the electron density at 100 points. Now, mathematically rotate the molecule's atomic coordinates by 45 degrees, rotate the query points by 45 degrees, and ask the AI to predict again. 
     *   *Success Metric:* The predictions must be 100.0% identical. This proves native SE(3) invariance.
 *   **Task 5.3: Infinite Resolution Render.** Write a visualization script (using Mayavi or PyMOL). Instead of querying random points, query a massively dense grid of points localized *only* around a specific carbon-carbon bond to render a hyper-resolution 3D isosurface of the electron cloud.
+
+**Execution:**
+```bash
+# Rapid test to ensure the model architecture can overfit a single batch
+python scripts/overfit_batch.py
+
+# Execute the full supervised training loop (Task 5.1)
+python scripts/train.py
+
+# Validate predictions, rotation invariance, and visualize the density field (Task 5.2, 5.3)
+python scripts/inspect_predictions.py
+```
 
 ---
 
