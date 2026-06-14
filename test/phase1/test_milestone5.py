@@ -40,7 +40,7 @@ def test_training_and_rendering():
     model.train()
     for epoch in range(2):
         optimizer.zero_grad()
-        density_pred = model(batch)
+        density_pred, potential, _ = model(batch)
         loss = criterion(density_pred.squeeze(), batch.y.squeeze())
         loss.backward()
         optimizer.step()
@@ -68,7 +68,8 @@ def test_training_and_rendering():
     with torch.no_grad():
         chunk_data = Data(z=z, pos=pos, query_pos=query_coords)
         chunk_batch = Batch.from_data_list([chunk_data]).to(device)
-        density_flat = model(chunk_batch).cpu().squeeze().numpy()
+        density, potential, _ = model(chunk_batch)
+        density_flat = density.cpu().squeeze().numpy()
         
     max_rho = density_flat.max()
     

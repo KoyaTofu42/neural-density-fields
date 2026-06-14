@@ -118,7 +118,8 @@ class NeuralDensityField(nn.Module):
         delta_density = delta_density_scaled * 100.0
         
         # The final density is the baseline + correction.
-        # We use ReLU to strictly enforce that the final physical density cannot be negative!
-        density = torch.relu(rho_low.view(-1, 1) + delta_density)
+        # We use Softplus instead of ReLU to strictly enforce non-negative physical density 
+        # while mathematically guaranteeing that gradients never die!
+        density = torch.nn.functional.softplus(rho_low.view(-1, 1) + delta_density)
         
         return density, potential, data.query_pos

@@ -42,9 +42,10 @@ class ContinuousDecoder(nn.Module):
         )
         
         # Initialization Fix: Since we want the initial delta to be near zero, 
-        # initialize the final layer to predict exactly 0 initially.
-        nn.init.zeros_(self.density_head[0].weight)
-        nn.init.zeros_(self.density_head[0].bias)
+        # initialize the final layer to predict a tiny positive value initially 
+        # so that it doesn't get trapped by the exact 0 gradient of the ReLU.
+        nn.init.uniform_(self.density_head[0].weight, -1e-4, 1e-4)
+        nn.init.constant_(self.density_head[0].bias, 1e-4)
 
     def forward(self, h_neighbors, distances, se3_features, rho_low):
         """

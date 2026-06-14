@@ -34,7 +34,7 @@ def run_ndf_test():
     # 5. Forward Pass
     print("\n[3] Running Forward Pass...")
     with torch.no_grad():
-        density = model(batch)
+        density, potential, query_pos = model(batch)
         
     print("\n[4] Verification Results:")
     print(f"  Expected shape: [{batch.query_pos.shape[0]} (Total queries), 1 (Density scalar)]")

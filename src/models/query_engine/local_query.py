@@ -39,7 +39,7 @@ class LocalQueryEngine(nn.Module):
         # Optimization: Skip masking if batch_query/atom are None (i.e. single molecule)
         if batch_query is not None and batch_atom is not None:
             mask = (batch_query.unsqueeze(1) == batch_atom.unsqueeze(0))
-            dist_mat.masked_fill_(~mask, float('inf'))
+            dist_mat = dist_mat.masked_fill(~mask, float('inf'))
         
         # Fallback if a molecule has fewer than K atoms (like H2 which has 2)
         actual_k = min(self.k, atom_pos.size(0))
