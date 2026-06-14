@@ -16,8 +16,9 @@ class ContinuousDecoder(nn.Module):
         super().__init__()
         
         # The input to the MLP is the flattened K anchor embeddings (k * hidden_dim)
-        # concatenated with the geometric SE(3) features (se3_feature_dim).
-        in_channels = (k * hidden_dim) + se3_feature_dim
+        # concatenated with the geometric SE(3) features (se3_feature_dim)
+        # AND the low-fidelity baseline density (1).
+        in_channels = (k * hidden_dim) + se3_feature_dim + 1
         
         self.mlp_shared = nn.Sequential(
             nn.Linear(in_channels, mlp_hidden),
@@ -32,30 +33,28 @@ class ContinuousDecoder(nn.Module):
         )
         
         self.density_head = nn.Sequential(
-            nn.Linear(mlp_hidden, 1),
-            # Softplus ensures the final predicted density is strictly >= 0 (physics constraint)
-            nn.Softplus() 
+            nn.Linear(mlp_hidden, 1)
+            # Softplus removed: the delta correction can be negative!
         )
         
         self.potential_head = nn.Sequential(
             nn.Linear(mlp_hidden, 1)
         )
         
-        # Initialization Fix: Softplus kills gradients if the network is forced negative.
-        # 98% of the density space is empty (target=0.0). If the network starts by predicting ~69.0,
-        # the empty space will forcefully drag the bias to -5.0, permanently killing the activation gradient!
-        # By initializing the bias to -5.0 directly, we start near 0.0, completely avoiding the dying gradient trap!
+        # Initialization Fix: Since we want the initial delta to be near zero, 
+        # initialize the final layer to predict exactly 0 initially.
         nn.init.zeros_(self.density_head[0].weight)
-        nn.init.constant_(self.density_head[0].bias, -5.0)
+        nn.init.zeros_(self.density_head[0].bias)
 
-    def forward(self, h_neighbors, distances, se3_features):
+    def forward(self, h_neighbors, distances, se3_features, rho_low):
         """
         Args:
             h_neighbors: [Q, K, hidden_dim] Embeddings of the K nearest atoms.
             distances: [Q, K] Exact Euclidean distances to the K neighbors.
             se3_features: [Q, se3_feature_dim] Invariant features (RBFs and angles).
+            rho_low: [Q, 1] The low-fidelity baseline density.
         Returns:
-            density: [Q, 1] Predicted electron density.
+            delta_density: [Q, 1] Predicted residual density correction.
             potential: [Q, 1] Predicted electrostatic potential.
         """
         # 1. Physics-based Distance Weighting (Task 4.2)
@@ -74,14 +73,14 @@ class ContinuousDecoder(nn.Module):
         c_q = weighted_h.view(weighted_h.size(0), -1) # [Q, K * hidden_dim]
         
         # 3. Concatenate and Predict
-        # We fuse the chemically-aligned context (c_q) with the spatial geometry (se3_features)
-        x = torch.cat([c_q, se3_features], dim=1) # [Q, (K * hidden_dim) + se3_feature_dim]
+        # We fuse the chemically-aligned context (c_q), spatial geometry (se3_features), and the baseline (rho_low)
+        x = torch.cat([c_q, se3_features, rho_low], dim=1) # [Q, (K * hidden_dim) + se3_feature_dim + 1]
         
         # Pass through the shared MLP trunk
         shared_out = self.mlp_shared(x) # [Q, mlp_hidden]
         
-        # Branch into density and potential
-        density = self.density_head(shared_out) # [Q, 1]
+        # Branch into delta density and potential
+        delta_density = self.density_head(shared_out) # [Q, 1]
         potential = self.potential_head(shared_out) # [Q, 1]
         
-        return density, potential
+        return delta_density, potential

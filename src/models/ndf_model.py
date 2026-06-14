@@ -102,12 +102,23 @@ class NeuralDensityField(nn.Module):
         h_neighbors = h_atoms[neighbor_indices] # [Q, K, hidden_dim]
         
         # --- 4. Decode ---
-        # Pass the neighbor embeddings, their distances, and the full geometric features
-        # through the decoder to get the final density and potential predictions!
-        density_scaled, potential = self.decoder(h_neighbors, distances, features) # [Q, 1]
+        # Safely handle backwards-compatibility if rho_low isn't present in older tests
+        rho_low = getattr(data, 'rho_low', None)
+        if rho_low is None:
+            rho_low = torch.zeros(data.query_pos.size(0), device=data.query_pos.device)
+            
+        # Scale the low-fidelity baseline to match network internal scales before passing it as a feature
+        # Ensure it has shape [Q, 1] for concatenation
+        rho_low_feat = rho_low.view(-1, 1) / 100.0
         
-        # Target Scaling: The network predicts a mathematically stable [0, 1] scale value.
-        # We multiply by 100.0 here so the model natively outputs the true physical electron density!
-        density = density_scaled * 100.0
+        # Predict the correction (delta)
+        delta_density_scaled, potential = self.decoder(h_neighbors, distances, features, rho_low_feat) # [Q, 1]
+        
+        # Scale back to physical units
+        delta_density = delta_density_scaled * 100.0
+        
+        # The final density is the baseline + correction.
+        # We use ReLU to strictly enforce that the final physical density cannot be negative!
+        density = torch.relu(rho_low.view(-1, 1) + delta_density)
         
         return density, potential, data.query_pos
