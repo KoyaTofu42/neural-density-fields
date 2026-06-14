@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 class ContinuousDecoder(nn.Module):
     def __init__(self, hidden_dim=128, se3_feature_dim=260, mlp_hidden=256, k=5):
@@ -20,7 +19,7 @@ class ContinuousDecoder(nn.Module):
         # concatenated with the geometric SE(3) features (se3_feature_dim).
         in_channels = (k * hidden_dim) + se3_feature_dim
         
-        self.mlp = nn.Sequential(
+        self.mlp_shared = nn.Sequential(
             nn.Linear(in_channels, mlp_hidden),
             nn.LayerNorm(mlp_hidden),
             nn.SiLU(),
@@ -29,18 +28,25 @@ class ContinuousDecoder(nn.Module):
             nn.SiLU(),
             nn.Linear(mlp_hidden, mlp_hidden),
             nn.LayerNorm(mlp_hidden),
-            nn.SiLU(),
+            nn.SiLU()
+        )
+        
+        self.density_head = nn.Sequential(
             nn.Linear(mlp_hidden, 1),
             # Softplus ensures the final predicted density is strictly >= 0 (physics constraint)
             nn.Softplus() 
+        )
+        
+        self.potential_head = nn.Sequential(
+            nn.Linear(mlp_hidden, 1)
         )
         
         # Initialization Fix: Softplus kills gradients if the network is forced negative.
         # 98% of the density space is empty (target=0.0). If the network starts by predicting ~69.0,
         # the empty space will forcefully drag the bias to -5.0, permanently killing the activation gradient!
         # By initializing the bias to -5.0 directly, we start near 0.0, completely avoiding the dying gradient trap!
-        nn.init.zeros_(self.mlp[-2].weight)
-        nn.init.constant_(self.mlp[-2].bias, -5.0)
+        nn.init.zeros_(self.density_head[0].weight)
+        nn.init.constant_(self.density_head[0].bias, -5.0)
 
     def forward(self, h_neighbors, distances, se3_features):
         """
@@ -50,6 +56,7 @@ class ContinuousDecoder(nn.Module):
             se3_features: [Q, se3_feature_dim] Invariant features (RBFs and angles).
         Returns:
             density: [Q, 1] Predicted electron density.
+            potential: [Q, 1] Predicted electrostatic potential.
         """
         # 1. Physics-based Distance Weighting (Task 4.2)
         # We strictly enforce that the neural network pays exponentially more attention
@@ -70,7 +77,11 @@ class ContinuousDecoder(nn.Module):
         # We fuse the chemically-aligned context (c_q) with the spatial geometry (se3_features)
         x = torch.cat([c_q, se3_features], dim=1) # [Q, (K * hidden_dim) + se3_feature_dim]
         
-        # Pass through the MLP to predict the final continuous scalar density
-        density = self.mlp(x) # [Q, 1]
+        # Pass through the shared MLP trunk
+        shared_out = self.mlp_shared(x) # [Q, mlp_hidden]
         
-        return density
+        # Branch into density and potential
+        density = self.density_head(shared_out) # [Q, 1]
+        potential = self.potential_head(shared_out) # [Q, 1]
+        
+        return density, potential

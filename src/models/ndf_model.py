@@ -54,7 +54,12 @@ class NeuralDensityField(nn.Module):
                   - query_pos: [Q, 3] Continuous spatial query points
         Returns:
             density: [Q, 1] Predicted electron density for each query point.
+            potential: [Q, 1] Predicted electrostatic potential for each query point.
+            query_pos: [Q, 3] The spatial query points, with requires_grad attached if training.
         """
+        if self.training and not data.query_pos.requires_grad:
+            data.query_pos.requires_grad_(True)
+            
         # --- 1. MPNN Anchor Embedding ---
         num_molecules = getattr(data, 'num_graphs', 1)
         batch_atom = getattr(data, 'batch', None) if num_molecules > 1 else None
@@ -98,11 +103,11 @@ class NeuralDensityField(nn.Module):
         
         # --- 4. Decode ---
         # Pass the neighbor embeddings, their distances, and the full geometric features
-        # through the decoder to get the final density prediction!
-        density_scaled = self.decoder(h_neighbors, distances, features) # [Q, 1]
+        # through the decoder to get the final density and potential predictions!
+        density_scaled, potential = self.decoder(h_neighbors, distances, features) # [Q, 1]
         
         # Target Scaling: The network predicts a mathematically stable [0, 1] scale value.
         # We multiply by 100.0 here so the model natively outputs the true physical electron density!
         density = density_scaled * 100.0
         
-        return density
+        return density, potential, data.query_pos
