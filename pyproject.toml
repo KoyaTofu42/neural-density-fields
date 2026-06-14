@@ -1,0 +1,23 @@
+[project]
+name = "neural-density-field"
+version = "0.1.0"
+description = "SE(3)-invariant neural density field baseline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch_geometric",
+    "pyscf",
+    "h5py",
+    "scipy",
+    "numpy",
+    "tqdm",
+    "networkx",
+    "plotly"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/data_gen", "src/dataset"]
