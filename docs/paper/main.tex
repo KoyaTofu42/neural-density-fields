@@ -1,21 +1,25 @@
-\documentclass[reprint, amsmath,amssymb, aps, prl]{revtex4-2}
+\documentclass[a4paper,12pt]{article}
 
+\usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{graphicx}
-\usepackage{dcolumn}
 \usepackage{bm}
+\usepackage[margin=1in]{geometry}
+\usepackage[hidelinks]{hyperref}
 
 \begin{document}
 
 \title{Physics-Informed Neural Density Fields: Bypassing the Voxel Curse with SE(3)-Equivariant Continuous Queries}
 
-\author{Your Name}
-\affiliation{Research Institute for Computational Chemistry}
+\author{}
+\date{}
+
+\maketitle
 
 \begin{abstract}
 Predicting high-resolution electron density fields is a long-standing challenge in computational chemistry, fundamentally limited by the $O(N^3)$ memory scaling of voxel-based 3D grids. We present the Physics-Informed Neural Density Field (PI-NDF), an SE(3)-invariant neural architecture that models electron density as a continuous function. By utilizing Message Passing Neural Networks (MPNN) to establish localized chemical context and querying spatial points directly via spherical harmonics, PI-NDF achieves sub-angstrom resolution with $O(1)$ VRAM scaling. Furthermore, we demonstrate that incorporating a \texttt{torch.compile} overhead-reduction framework enables the querying of 500,000 continuous spatial points in under 150 milliseconds on consumer hardware, maintaining near-perfect fidelity with Coupled-Cluster (CCSD) ground truth in complex non-covalent interactions.
 \end{abstract}
 
-\maketitle
 
 \section{\label{sec:intro}Introduction}
 The electron density $\rho(\mathbf{r})$ is the fundamental property of any molecular system according to Hohenberg-Kohn theorems. Conventional deep learning approaches attempt to predict this density using 3D Convolutional Neural Networks (3D-CNNs) defined on fixed voxel grids. However, this is plagued by the "Voxel Curse"---doubling the resolution requires an eight-fold increase in memory, rendering macromolecular or high-resolution analysis completely intractable on standard GPUs.
@@ -34,6 +38,18 @@ A primary challenge of continuous query networks is the computational overhead o
 
 \subsection{Gold Standard Validation}
 To prove physical fidelity, we evaluated our network specifically within chemically complex zones such as non-covalent bond axes and compared the output against unrelaxed density matrices derived from PySCF Coupled-Cluster Singles and Doubles (CCSD) calculations. The continuous nature of PI-NDF allowed us to map the Reduced Density Gradient (RDG) with unprecedented smoothness, flawlessly capturing Hydrogen bond localizations.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/vram_scaling.pdf}
+\caption{\label{fig:vram}Memory scaling comparison between traditional 3D-CNN voxel grids and the PI-NDF continuous query architecture. While voxel memory explodes cubically ($O(N^3)$), PI-NDF maintains a flat memory footprint.}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/time_scaling.pdf}
+\caption{\label{fig:time}Inference latency scaling for PI-NDF powered by \texttt{torch.compile}. Querying over half a million points takes only $\sim$145 milliseconds.}
+\end{figure}
 
 \section{\label{sec:conclusion}Conclusion}
 The Physics-Informed Neural Density Field bypasses the classical memory bottlenecks of computational chemistry deep learning. It enables infinite-resolution density generation capable of running locally on consumer hardware. 
